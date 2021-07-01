@@ -1,30 +1,48 @@
 import SwiftUI
 import CoreGraphics
 
-struct InvadersContainer: View {
-    var machine = InvadersMachine()
+struct Intel8080View: View {
+    var invadersMachine = InvadersMachine()
+    var testMachine = TestMachine()
     
     var body: some View {
         VStack(content: {
-            InvadersViewRep(machine: machine)
+            InvadersViewBridge(machine: invadersMachine)
             
-            Button(action: stop) {
-                Text("STOP")
-            }
+            HStack(content: {
+                Button(action: stop) {
+                    Text("TOGGLE PAUSE")
+                }
+                Button(action: play) {
+                    Text("PLAY")
+                }
+            })
         })
     }
     
     func stop() {
-        machine.stop()
+        invadersMachine.toggleOnOff()
+    }
+    
+    func play() {
+        invadersMachine.load()
     }
 }
 
-struct InvadersViewRep: NSViewRepresentable {
+struct InvadersViewBridge: NSViewRepresentable {
     let machine: InvadersMachine
     typealias NSViewType = InvadersView
     
     func makeNSView(context: Context) -> InvadersView {
-        return InvadersView(machine: machine)
+        let view = InvadersView(machine: machine)
+        
+        // Match the window color space with the CGContext color space
+        // to avoid sampling and improve performance
+        DispatchQueue.main.async { [weak view] in
+            view?.window?.colorSpace = NSColorSpace.sRGB
+        }
+        
+        return view
     }
     
     func updateNSView(_ nsView: InvadersView, context: Context) {
@@ -34,29 +52,23 @@ struct InvadersViewRep: NSViewRepresentable {
 
 class InvadersView: NSView {
     var machine: InvadersMachine
-    var bitmapCtx: CGContext
     var bitmap = UnsafeMutablePointer<UInt32>.allocate(capacity: 224 * 256)
+    var pixels:  UnsafeMutableBufferPointer<UInt32>
     var timer: Timer?
     
     var iter: Int = 0
     
     init(machine: InvadersMachine) {
         self.machine = machine
-        self.machine.start()
-        
-        self.bitmapCtx = CGContext(
-            data: bitmap,
-            width: 224,
-            height: 256,
-            bitsPerComponent: 8,
-            bytesPerRow: 224 * 4,
-            space: CGColorSpaceCreateDeviceRGB(),
-            bitmapInfo: CGBitmapInfo.byteOrder32Big.rawValue | CGImageAlphaInfo.premultipliedLast.rawValue
-        )!
 
+        self.pixels = UnsafeMutableBufferPointer<UInt32>(start: bitmap, count: 224 * 256)
         super.init(frame: .zero)
 
-        self.timer = Timer.scheduledTimer(timeInterval: 0.016, target: self, selector: #selector(setNeedsDisplay(_:)), userInfo: nil, repeats: true)
+        self.timer = Timer.scheduledTimer(timeInterval: 0.05, target: self, selector: #selector(done), userInfo: nil, repeats: true)
+    }
+    
+    @objc func done() {
+        self.needsDisplay = true
     }
     
     required init?(coder: NSCoder) {
@@ -64,13 +76,23 @@ class InvadersView: NSView {
     }
     
     override func draw(_ dirtyRect: CGRect) {
-        let pixels = UnsafeMutableBufferPointer<UInt32>(start: bitmap, count: 224 * 256)
+        let bitmapCtx = CGContext(
+            data: bitmap,
+            width: 224,
+            height: 256,
+            bitsPerComponent: 8,
+            bytesPerRow: 224 * 4,
+            space: CGColorSpaceCreateDeviceRGB(),
+            bitmapInfo: CGImageAlphaInfo.noneSkipLast.rawValue
+        )!
+        
         for i in 0..<224 {
             for j in 0..<256 {
                 if (j%8 != 0) { continue }
 
                 let pixel = machine.state.memory[0x2400 + (i * 32) + Int(j/8)];
                 let offset: Int = (255 - j) * 224 + i;
+
                 for p in 0..<8 {
                     if ((pixel & (1 << p)) != 0) {
                         pixels[offset - (p * 224)] = 0xFFFFFFFF
@@ -84,15 +106,13 @@ class InvadersView: NSView {
         guard let image = bitmapCtx.makeImage() else { return }
         guard let context = NSGraphicsContext.current else { return }
         let ctx = context.cgContext
-        ctx.draw(image, in: self.visibleRect)
-        
-        self.setNeedsDisplay(_:dirtyRect)
+        ctx.draw(image, in: self.frame)
     }
 }
 
 struct ContentView_Previews: PreviewProvider {
     static var previews: some View {
-        InvadersContainer()
+        Intel8080View()
             .frame(width: 500, height: 500)
     }
 }

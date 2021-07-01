@@ -1,14 +1,5 @@
 import Foundation
 
-struct ConditionCodes {
-    var z: UInt8 = 0
-    var s: UInt8 = 0
-    var p: UInt8 = 0
-    var cy: UInt8 = 0
-    var ac: UInt8 = 0
-    var pad: UInt8 = 0
-}
-
 struct State8080 {
     var a: UInt8 = 0
     var b: UInt8 = 0
@@ -19,11 +10,26 @@ struct State8080 {
     var l: UInt8 = 0
     var sp: UInt16 = 0
     var pc: UInt16 = 0
-    var memory: Array<UInt8> = Array.init(repeating: 0, count: 0xffff)
+    var memory: Array<UInt8> = Array.init(repeating: 0, count: 0x10000)
     var cc: ConditionCodes = ConditionCodes()
     var intEnable: UInt8 = 0
     var cycle: Int = 0
     var hit: Int = 0
+    var debug: Bool = false
+}
+
+struct ConditionCodes {
+    var z: UInt8 = 0
+    var s: UInt8 = 0
+    var p: UInt8 = 0
+    var cy: UInt8 = 0
+    var ac: UInt8 = 0
+    var pad: UInt8 = 0
+}
+
+struct IO {
+    let input: (UInt8) -> UInt8
+    let output: (UInt8, UInt8) -> Void
 }
 
 enum Register: UInt8 {
@@ -57,7 +63,7 @@ func parity(n: UInt8) -> UInt8 {
     return parityBit
 }
 
-func emulateOperation(state: inout State8080) {
+func emulateOperation(state: inout State8080, io: IO?) {
     let opcode: UInt8 = state.memory[Int(state.pc)]
     
     func getRegisterPair(pair: UInt8) -> UInt16 {
@@ -134,8 +140,8 @@ func emulateOperation(state: inout State8080) {
         let MSB = UInt8((value >> 8) & 0xff)
         let LSB = UInt8(value & 0xff)
         
-        state.memory[Int(state.sp) &- 1] = MSB
-        state.memory[Int(state.sp) &- 2] = LSB
+        state.memory[Int(state.sp &- 1)] = MSB
+        state.memory[Int(state.sp &- 2)] = LSB
         state.sp = state.sp &- 2
     }
     
@@ -209,8 +215,7 @@ func emulateOperation(state: inout State8080) {
     switch opcode {
 
     // NOP
-    case 0x00, 0x08, 0x10, 0x18, 0x28, 0x38, 0xcb, 0xdd, 0xd9, 0xed, 0xfd:
-        print("NOP")
+    case 0x00, 0x08, 0x10, 0x18, 0x20, 0x28, 0x38, 0xcb, 0xdd, 0xd9, 0xed, 0xfd:
         incrementPC(val: 1)
         incrementCycles(val: 4)
 
@@ -334,15 +339,11 @@ func emulateOperation(state: inout State8080) {
     case 0x1f:
         // Swap carry with low order bit, then rotate accumulator one bit position to the right
         let low = state.a & 0b1
-        state.a = ((state.cc.cy << 1) | (state.a >> 1)) & 0xff
+        state.a = ((state.cc.cy << 7) | (state.a >> 1)) & 0xff
         state.cc.cy = low
         
         incrementPC(val: 1)
         incrementCycles(val: 4)
-
-    // RIM
-    case 0x20:
-        print("RIM - NOT USED")
 
     // SHLD adr
     case 0x22:
@@ -358,6 +359,7 @@ func emulateOperation(state: inout State8080) {
     // DAA
     case 0x27:
         print("DAA - NOT USED")
+        incrementPC(val: 1)
 
     // LHLD adr
     case 0x2a:
@@ -378,6 +380,7 @@ func emulateOperation(state: inout State8080) {
     // SIM
     case 0x30:
         print("SIM - NOT USED")
+        incrementPC(val: 1)
 
     // STA adr
     case 0x32:
@@ -596,7 +599,7 @@ func emulateOperation(state: inout State8080) {
         
     // RST
     case 0xc7, 0xcf, 0xd7, 0xdf, 0xe7, 0xef, 0xf7, 0xff:
-        pushToStack(value: state.pc + 1)
+        pushToStack(value: state.pc)
         let exp = UInt16(opcode & 0b000111)
         state.pc = exp
         
@@ -620,12 +623,28 @@ func emulateOperation(state: inout State8080) {
         
         incrementPC(val: 2)
         incrementCycles(val: 7)
+        
+    // IN D8
+    case 0xdb:
+        if (io != nil) {
+            state.a = io!.input(state.memory[Int(state.pc &+ 1)])
+        }
+
+        incrementPC(val: 2)
+    
+    // OUT D8
+    case 0xd3:
+        if (io != nil) {
+            io!.output(state.memory[Int(state.pc &+ 1)], state.a)
+        }
+        
+        incrementPC(val: 2)
 
     // SUI D8
     case 0xd6:
         // Immediate form; subtract the byte that comes after the instruction
         let data = state.memory[Int(state.pc + 1)]
-        let complement = ~getRegister(register: data) &+ 1
+        let complement = ~data &+ 1
         add(val1: state.a, val2: complement, setCarry: true)
         
         incrementPC(val: 2)
@@ -635,7 +654,7 @@ func emulateOperation(state: inout State8080) {
     case 0xde:
         // Immediate form (with carry); subtract the byte that comes after the instruction
         let data = state.memory[Int(state.pc + 1)]
-        let complement = ~(getRegister(register: data) &+ state.cc.cy) &+ 1
+        let complement = ~(data &+ state.cc.cy) &+ 1
         add(val1: state.a, val2: complement, setCarry: true)
         
         incrementPC(val: 2)
@@ -652,7 +671,7 @@ func emulateOperation(state: inout State8080) {
         state.memory[Int(sp)] = l
         state.memory[Int(sp) + 1] = h
         
-        incrementPC(val: 2)
+        incrementPC(val: 1)
         incrementCycles(val: 18)
 
     // ANI D8
@@ -749,18 +768,20 @@ func emulateOperation(state: inout State8080) {
     
     state.hit += 1
 
-//    print(
-//        state.hit, " - ",
-//        "cycle:", state.cycle,
-//        "opcode:", toHex(n: UInt16(opcode)), "  ",
-//        "bc:", toHex(n: getRegisterPair(pair: RegisterPair.BC.rawValue)), "  ",
-//        "de:", toHex(n: getRegisterPair(pair: RegisterPair.DE.rawValue)), "  ",
-//        "hl:", toHex(n: getRegisterPair(pair: RegisterPair.HL.rawValue)), "  ",
-//        "pc:", toHex(n: state.pc), "  ",
-//        "sp:", toHex(n: getRegisterPair(pair: RegisterPair.SP.rawValue)), "  ",
-//        "z:", state.cc.z,
-//        "cy:", state.cc.cy,
-//        "p:", state.cc.p,
-//        "s:", state.cc.s
-//    )
+//    if (state.debug && state.pc != 0x0ada && state.pc != 0x0ade && state.pc != 0x0add) {
+//        print(
+//            state.hit, " - ",
+//            "cycle:", state.cycle,
+//            "opcode:", toHex(n: UInt16(opcode)), "  ",
+//            "bc:", toHex(n: getRegisterPair(pair: RegisterPair.BC.rawValue)), "  ",
+//            "de:", toHex(n: getRegisterPair(pair: RegisterPair.DE.rawValue)), "  ",
+//            "hl:", toHex(n: getRegisterPair(pair: RegisterPair.HL.rawValue)), "  ",
+//            "pc:", toHex(n: state.pc), "  ",
+//            "sp:", toHex(n: getRegisterPair(pair: RegisterPair.SP.rawValue)), "  ",
+//            "z:", state.cc.z,
+//            "cy:", state.cc.cy,
+//            "p:", state.cc.p,
+//            "s:", state.cc.s
+//        )
+//    }
 }
