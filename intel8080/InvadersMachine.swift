@@ -1,5 +1,10 @@
 import Cocoa
 
+class InvadersSounds: NSObject {
+    public let one = NSSound(contentsOfFile: Bundle.main.path(forResource: "1", ofType: "wav", inDirectory: "sounds")!, byReference: true)
+    public let two = NSSound(contentsOfFile: Bundle.main.path(forResource: "2", ofType: "wav", inDirectory: "sounds")!, byReference: true)
+}
+
 class InvadersMachine: NSObject {
     public var state: State8080 = State8080()
     public var io: IO?
@@ -10,7 +15,18 @@ class InvadersMachine: NSObject {
     var shiftY: UInt8 = 0
     var shiftOffset: UInt8 = 0
     
+    // The CPU will poll these ports to see which keys are pressed.
     var port1: UInt8 = 0
+    var port2: UInt8 = 0
+    
+    // The CPU will set these ports, and the machine
+    // polls them to know which sounds to play.
+    var port3: (curr: UInt8, prev: UInt8) = (0, 0)
+    var port5: (curr: UInt8, prev: UInt8) = (0, 0)
+    
+    var sounds: [NSSound] = []
+    
+    // Used to keep track of interrupts.
     var lastInterrupt: Double = 0
     var whichInterrupt: UInt16 = 2
     
@@ -19,52 +35,85 @@ class InvadersMachine: NSObject {
     
     func input(port: UInt8) -> UInt8 {
         switch port {
-        case 0: return 1
-        case 1: return 0
+        case 0: return self.port2
+        case 1: return self.port1
         case 3:
-            let pair = (UInt16(shiftX) << 8) | (UInt16(shiftY))
-            return UInt8((pair >> (8 - shiftOffset)) & 0xff)
+            let pair = (UInt16(self.shiftX) << 8) | (UInt16(self.shiftY))
+            return UInt8((pair >> (8 - self.shiftOffset)) & 0xff)
         default: return 0
         }
     }
     
     func output(port: UInt8, value: UInt8) {
         switch port {
-        case 2:
-            self.shiftOffset = value
+        case 2: self.shiftOffset = value
+        case 3: self.port3 = (curr: value, prev: self.port3.curr)
         case 4:
             self.shiftY = self.shiftX
             self.shiftX = value
+        case 5: self.port5 = (curr: value, prev: self.port5.curr)
         default: ()
+        }
+        
+        playSounds()
+    }
+    
+    func initSounds() {
+        var paths = Bundle.main.paths(forResourcesOfType: "wav", inDirectory: "sounds")
+        paths.sort()
+        sounds = paths.map {
+            NSSound(contentsOfFile: $0, byReference: true)!
         }
     }
     
-    func keyDown(code: UInt16) {
+    func playSounds() {
+        let port3Bits = (port3.curr ^ port3.prev) & port3.curr
+        let port5Bits = (port5.curr ^ port5.prev) & port5.curr
+        
+        if (port3Bits & 0x2 != 0) { sounds[1].play() }
+        if (port3Bits & 0x4 != 0) { sounds[2].play() }
+        if (port3Bits & 0x8 != 0) { sounds[3].play() }
+        
+        if (port5Bits & 0x1 != 0) { sounds[4].play() }
+        if (port5Bits & 0x2 != 0) { sounds[5].play() }
+        if (port5Bits & 0x4 != 0) { sounds[6].play() }
+        if (port5Bits & 0x8 != 0) { sounds[7].play() }
+    }
+    
+    func keyDown(code: UInt16) -> Bool {
         switch code {
         // Left: set bit 5 (left)
         case 123: port1 |= 0b00100000
         // Right: set bit 6 (right)
         case 124: port1 |= 0b01000000
-        // Up: set bit 4 (shoot)
-        case 126: port1 |= 0b00010000
+        // Up/Space: set bit 4 (shoot)
+        case 126, 49: port1 |= 0b00010000
         // Enter: set bit 2 (start)
         case 36: port1 |= 0b00000100
-        default: ()
+        // C: set bit 5 (coin)
+        case 8: port1 |= 0b00000001
+        default: return false
         }
+        
+        return true
     }
         
-    func keyUp(code: UInt16) {
+    func keyUp(code: UInt16) -> Bool {
         switch code {
         // Left: unset bit 5 (left)
         case 123: port1 &= 0b11011111
         // Right: unset bit 6 (right)
         case 124: port1 &= 0b10111111
         // Up: unset bit 4 (shoot)
-        case 126: port1 &= 0b11101111
+        case 126, 49: port1 &= 0b11101111
         // Enter: unset bit 2 (start)
         case 36: port1 &= 0b11111011
-        default: ()
+        // C: unset bit 5 (coin)
+        case 8: port1 &= 0b11111110
+        default: return false
         }
+        
+        return true
     }
     
     func interrupt(state: inout State8080, num: UInt16) {
@@ -89,6 +138,7 @@ class InvadersMachine: NSObject {
         
         io = IO(input: input, output: output)
         
+        initSounds()
         toggleOnOff()
     }
     

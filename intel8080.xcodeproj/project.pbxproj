@@ -9,8 +9,9 @@
 /* Begin PBXBuildFile section */
 		22115CA22688B0EF003A05FE /* QuartzCore.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 22115CA12688B0EF003A05FE /* QuartzCore.framework */; };
 		22115CA52688B92A003A05FE /* intel8080App.swift in Sources */ = {isa = PBXBuildFile; fileRef = 22115CA42688B92A003A05FE /* intel8080App.swift */; };
+		223B5EF3268E6C3B00AC5DEA /* sounds in Resources */ = {isa = PBXBuildFile; fileRef = 223B5EF2268E6C3B00AC5DEA /* sounds */; };
+		223B5F01268E6C5B00AC5DEA /* roms in Resources */ = {isa = PBXBuildFile; fileRef = 223B5F00268E6C5B00AC5DEA /* roms */; };
 		226BD1842687BEDD00739574 /* InvadersMachine.swift in Sources */ = {isa = PBXBuildFile; fileRef = 226BD1832687BEDD00739574 /* InvadersMachine.swift */; };
-		226D7778268DFF9800101F6A /* roms in Resources */ = {isa = PBXBuildFile; fileRef = 226D7777268DFF9800101F6A /* roms */; };
 		226D777A268E011700101F6A /* TestMachine.swift in Sources */ = {isa = PBXBuildFile; fileRef = 226D7779268E011700101F6A /* TestMachine.swift */; };
 		2289E667266DA0440070DA2B /* InvadersView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2289E666266DA0440070DA2B /* InvadersView.swift */; };
 		2289E669266DA0460070DA2B /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 2289E668266DA0460070DA2B /* Assets.xcassets */; };
@@ -21,8 +22,9 @@
 /* Begin PBXFileReference section */
 		22115CA12688B0EF003A05FE /* QuartzCore.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = QuartzCore.framework; path = System/Library/Frameworks/QuartzCore.framework; sourceTree = SDKROOT; };
 		22115CA42688B92A003A05FE /* intel8080App.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = intel8080App.swift; sourceTree = "<group>"; };
+		223B5EF2268E6C3B00AC5DEA /* sounds */ = {isa = PBXFileReference; lastKnownFileType = folder; path = sounds; sourceTree = "<group>"; };
+		223B5F00268E6C5B00AC5DEA /* roms */ = {isa = PBXFileReference; lastKnownFileType = folder; path = roms; sourceTree = "<group>"; };
 		226BD1832687BEDD00739574 /* InvadersMachine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = InvadersMachine.swift; sourceTree = "<group>"; };
-		226D7777268DFF9800101F6A /* roms */ = {isa = PBXFileReference; lastKnownFileType = folder; path = roms; sourceTree = "<group>"; };
 		226D7779268E011700101F6A /* TestMachine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TestMachine.swift; sourceTree = "<group>"; };
 		2289E661266DA0440070DA2B /* intel8080.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = intel8080.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		2289E666266DA0440070DA2B /* InvadersView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = InvadersView.swift; sourceTree = "<group>"; };
@@ -75,9 +77,9 @@
 		2289E663266DA0440070DA2B /* intel8080 */ = {
 			isa = PBXGroup;
 			children = (
+				223B5EF2268E6C3B00AC5DEA /* sounds */,
 				22115CA42688B92A003A05FE /* intel8080App.swift */,
 				2289E666266DA0440070DA2B /* InvadersView.swift */,
-				226D7777268DFF9800101F6A /* roms */,
 				2289E668266DA0460070DA2B /* Assets.xcassets */,
 				2289E66D266DA0460070DA2B /* Info.plist */,
 				2289E66E266DA0460070DA2B /* intel8080.entitlements */,
@@ -85,6 +87,7 @@
 				22DAADCF267E7F44003DB50A /* CPU.swift */,
 				226BD1832687BEDD00739574 /* InvadersMachine.swift */,
 				226D7779268E011700101F6A /* TestMachine.swift */,
+				223B5F00268E6C5B00AC5DEA /* roms */,
 			);
 			path = intel8080;
 			sourceTree = "<group>";
@@ -157,7 +160,8 @@
 			files = (
 				2289E66C266DA0460070DA2B /* Preview Assets.xcassets in Resources */,
 				2289E669266DA0460070DA2B /* Assets.xcassets in Resources */,
-				226D7778268DFF9800101F6A /* roms in Resources */,
+				223B5EF3268E6C3B00AC5DEA /* sounds in Resources */,
+				223B5F01268E6C5B00AC5DEA /* roms in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

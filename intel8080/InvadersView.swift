@@ -36,10 +36,13 @@ struct InvadersViewBridge: NSViewRepresentable {
     func makeNSView(context: Context) -> InvadersView {
         let view = InvadersView(machine: machine)
         
-        // Match the window color space with the CGContext color space
-        // to avoid sampling and improve performance
         DispatchQueue.main.async { [weak view] in
+            // Match the window color space with the CGContext color space
+            // to avoid sampling and improve performance.
             view?.window?.colorSpace = NSColorSpace.sRGB
+            
+            // Make first responder to catch keyboard events.
+            view?.window?.makeFirstResponder(view)
         }
         
         return view
@@ -56,8 +59,6 @@ class InvadersView: NSView {
     var pixels:  UnsafeMutableBufferPointer<UInt32>
     var timer: Timer?
     
-    var iter: Int = 0
-    
     init(machine: InvadersMachine) {
         self.machine = machine
 
@@ -65,6 +66,22 @@ class InvadersView: NSView {
         super.init(frame: .zero)
 
         self.timer = Timer.scheduledTimer(timeInterval: 0.05, target: self, selector: #selector(done), userInfo: nil, repeats: true)
+        
+        NSEvent.addLocalMonitorForEvents(matching: .keyDown) {
+            self.keyDown(with: $0)
+            return $0
+        }
+    }
+
+    // Handle keyboard events
+    override var acceptsFirstResponder: Bool { true }
+    override func keyDown(with event: NSEvent) {
+        let wasHandled = machine.keyDown(code: event.keyCode)
+        if (!wasHandled) { super.keyDown(with: event) }
+    }
+    override func keyUp(with event: NSEvent) {
+        let wasHandled = machine.keyUp(code: event.keyCode)
+        if (!wasHandled) { super.keyUp(with: event) }
     }
     
     @objc func done() {
