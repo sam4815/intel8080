@@ -1,8 +1,9 @@
 import Cocoa
 
-class InvadersSounds: NSObject {
-    public let one = NSSound(contentsOfFile: Bundle.main.path(forResource: "1", ofType: "wav", inDirectory: "sounds")!, byReference: true)
-    public let two = NSSound(contentsOfFile: Bundle.main.path(forResource: "2", ofType: "wav", inDirectory: "sounds")!, byReference: true)
+enum Game: String, Equatable, CaseIterable {
+    case SpaceInvaders = "Space Invaders"
+    case BalloonBomber = "Balloon Bomber"
+    case LunarRescue = "Lunar Rescue"
 }
 
 class InvadersMachine: NSObject {
@@ -24,6 +25,7 @@ class InvadersMachine: NSObject {
     var port3: (curr: UInt8, prev: UInt8) = (0, 0)
     var port5: (curr: UInt8, prev: UInt8) = (0, 0)
     
+    var muted: Bool = true
     var sounds: [NSSound] = []
     
     // Used to keep track of interrupts.
@@ -31,7 +33,12 @@ class InvadersMachine: NSObject {
     var whichInterrupt: UInt16 = 2
     
     var lastTimer: Double?
-    var timer: Timer?
+    public var timer: Timer?
+    
+    override init() {
+        super.init()
+        self.io = IO(input: input, output: output)
+    }
     
     func input(port: UInt8) -> UInt8 {
         switch port {
@@ -67,6 +74,8 @@ class InvadersMachine: NSObject {
     }
     
     func playSounds() {
+        if (muted) { return }
+        
         let port3Bits = (port3.curr ^ port3.prev) & port3.curr
         let port5Bits = (port5.curr ^ port5.prev) & port5.curr
         
@@ -78,6 +87,10 @@ class InvadersMachine: NSObject {
         if (port5Bits & 0x2 != 0) { sounds[5].play() }
         if (port5Bits & 0x4 != 0) { sounds[6].play() }
         if (port5Bits & 0x8 != 0) { sounds[7].play() }
+    }
+    
+    func toggleMute() {
+        muted = !muted
     }
     
     func keyDown(code: UInt16) -> Bool {
@@ -127,19 +140,40 @@ class InvadersMachine: NSObject {
         state.pc = num * 8
     }
     
-    public func load() {
-        let filePath = Bundle.main.path(forResource: "invaders", ofType: "rom", inDirectory: "roms")
-        let data = NSData(contentsOfFile: filePath!)!
+    func copyData(data: NSData, memOffset: Int) {
         let dataBuffer = [UInt8](data)
         
         for (index, byte) in dataBuffer.enumerated() {
-            state.memory[index] = byte
+            state.memory[memOffset + index] = byte
+        }
+    }
+    
+    public func load(game: Game.RawValue) {
+        switch (game) {
+        case Game.BalloonBomber.rawValue:
+            let ballbombData: [(String, Int)] = [("tn01", 0x0000), ("tn02", 0x0800), ("tn03", 0x1000), ("tn04", 0x1800), ("tn05-1", 0x4000)]
+            for data in ballbombData {
+                copyData(
+                    data: NSData(contentsOfFile: Bundle.main.path(forResource: data.0, ofType: nil, inDirectory: "roms/ballbomb")!)!,
+                    memOffset: data.1
+                )
+            }
+        
+        case Game.SpaceInvaders.rawValue:
+            copyData(
+                data: NSData(contentsOfFile: Bundle.main.path(forResource: "invaders", ofType: "rom", inDirectory: "roms")!)!,
+                memOffset: 0
+            )
+        
+        case Game.LunarRescue.rawValue:
+            copyData(
+                data: NSData(contentsOfFile: Bundle.main.path(forResource: "lrescue", ofType: "rom", inDirectory: "roms")!)!,
+                memOffset: 0
+            )
+        default: ()
         }
         
-        io = IO(input: input, output: output)
-        
         initSounds()
-        toggleOnOff()
     }
     
     @objc func run() {
@@ -160,27 +194,22 @@ class InvadersMachine: NSObject {
         let elapsedCycles = Int(elapsedTime * 2000000)
         
         while (state.cycle < elapsedCycles) {
-            emulateOperation(state: &state, io: io!)
+            emulateOperation(state: &state, io: io)
         }
     
         state.cycle = 0
         self.lastTimer = CACurrentMediaTime()
     }
     
-    public func toggleOnOff() {
-        if (timer == nil) {
-            lastTimer = CACurrentMediaTime()
-            timer = Timer.scheduledTimer(timeInterval: 0.005, target: self, selector: #selector(run), userInfo: nil, repeats: true)
-        } else {
-            timer?.invalidate()
-            timer = nil
-        }
+    public func start() {
+        if (timer != nil) { stop() }
+
+        lastTimer = CACurrentMediaTime()
+        timer = Timer.scheduledTimer(timeInterval: 0.005, target: self, selector: #selector(run), userInfo: nil, repeats: true)
     }
     
-    public func reset() {
+    public func stop() {
         timer?.invalidate()
         timer = nil
-        state = State8080()
-        load()
     }
 }
