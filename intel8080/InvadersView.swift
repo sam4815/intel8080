@@ -1,55 +1,8 @@
 import SwiftUI
 import CoreGraphics
 
-let COLORS: [[UInt32]] = [
-    [0xffdfe2ee, 0xffc5d7ee, 0xff9c9fc8, 0xff5d7cc9, 0xff5e6ab3, 0xff271601, 0xffd4ea41, 0xff3b4660, 0xff38312e],
-    [0xff466ebe, 0xffb0e7cd, 0xffa8bfa3, 0xffa08672, 0xff4a5959, 0xff525544, 0xff4a4d29, 0xff1f0232, 0xff392e4b],
-    [0xff75906e, 0xff9bc4ff, 0xffd3efff, 0xffc4b6ad, 0xff3500ff, 0xff9c938b, 0xff6c5459, 0xff5f4038, 0xff1f130e],
-    [0xfff8f8f9, 0xffced3cd, 0xffbdb5bb, 0xffa36daa, 0xffa67792, 0xff271601, 0xff3517f7, 0xff1c9fff, 0xff464750],
-    [0xff222921, 0xff364929, 0xff59623e, 0xff66825b, 0xffc7f6ae, 0xffd7d9d7, 0xffcbc5c9, 0xffffebff, 0xffae8eb4],
-    [0xff89d2ff, 0xff88c6f9, 0xff7db1f9, 0xff2a81fc, 0xff0066a5, 0xffcbc5b7, 0xff4a8383, 0xff686868, 0xff474747],
-    [0xffacb0d5, 0xffaea0ce, 0xff514568, 0xff2a2e40, 0xff8fd09c, 0xff8c7900, 0xff5b3d00, 0xff1f1700, 0xffa77e00]
-]
-
-class Settings: ObservableObject {
-    @Published var color: [UInt32] = [0xffacb0d5, 0xffaea0ce, 0xff514568, 0xff2a2e40, 0xff8fd09c, 0xff8c7900, 0xff5b3d00, 0xff1f1700, 0xffa77e00]
-}
-
-struct Intel8080View: View {
-    @ObservedObject var settings: Settings = Settings()
-    var testMachine = TestMachine()
-    
-    var body: some View {
-        NavigationView {
-            List {
-                ForEach(Game.allCases, id: \.rawValue) { game in
-                    NavigationLink(
-                        destination: NavigationLazyView(InvadersView(game: game.rawValue)),
-                        label: {
-                            Text(game.rawValue)
-                        })
-                }
-            }
-        }.toolbar(content: {
-            ToolbarItem(placement: .primaryAction) {
-                Button(
-                    action: changeColour,
-                    label: {
-                        Image(systemName: "paintbrush")
-                            .font(Font.system(.largeTitle))
-                    })
-            }
-        })
-    }
-    
-    func changeColour() {
-//        let colorIndex = (COLORS.firstIndex(of: settings.color) + 1) % COLORS.count
-//        settings.color = COLORS[colorIndex]
-    }
-}
-
 struct InvadersView: NSViewRepresentable {
-    let game: Game.RawValue
+    @Binding var game: Game.RawValue
     typealias NSViewType = InvadersNSView
     
     func makeNSView(context: Context) -> InvadersNSView {
@@ -59,36 +12,47 @@ struct InvadersView: NSViewRepresentable {
             // Match the window color space with the CGContext color space
             // to avoid sampling and improve performance.
             view?.window?.colorSpace = NSColorSpace.sRGB
-            
-            // Make first responder to catch keyboard events.
+            // Make view the first responder in order to catch keyboard events.
             view?.window?.makeFirstResponder(view)
+            // Fix aspect ratio to game's aspect ratio (accounting for toolbar).
+            view?.window?.aspectRatio = NSSize(width: 224, height: 256 + 26)
         }
         
         return view
     }
     
     func updateNSView(_ nsView: InvadersNSView, context: Context) {
+        nsView.game = game
     }
 }
 
 class InvadersNSView: NSView {
     var machine: InvadersMachine = InvadersMachine()
-    @StateObject var settings = Settings()
     
     var bitmap = UnsafeMutablePointer<UInt32>.allocate(capacity: 224 * 256)
     var pixels:  UnsafeMutableBufferPointer<UInt32>
     
     weak var timer: Timer?
     
-    var color: [UInt32] = [0xffacb0d5, 0xffaea0ce, 0xff514568, 0xff2a2e40, 0xff8fd09c, 0xff8c7900, 0xff5b3d00, 0xff1f1700, 0xffa77e00]
+    var colour: [UInt32] = UserDefaults.standard.array(forKey: "colours") as? [UInt32] ?? COLOURS[0]
+    
+    var game: Game.RawValue {
+        didSet {
+            machine.stop()
+            machine = InvadersMachine()
+            machine.load(game: game)
+            machine.start()
+        }
+    }
     
     init(game: Game.RawValue) {
         self.pixels = UnsafeMutableBufferPointer<UInt32>(start: bitmap, count: 224 * 256)
-        machine.load(game: game)
+        self.game = game
         
         super.init(frame: .zero)
         
-        machine.start()
+        NotificationCenter.default.addObserver(self, selector: #selector(userDefaultsDidChange), name: UserDefaults.didChangeNotification, object: nil)
+        
         timer = Timer.scheduledTimer(withTimeInterval: 0.05, repeats: true, block: {[weak self] _ in
             self?.needsDisplay = true
         })
@@ -98,13 +62,18 @@ class InvadersNSView: NSView {
         machine.stop()
         self.timer?.invalidate()
         self.timer = nil
+        NotificationCenter.default.removeObserver(self, name: UserDefaults.didChangeNotification, object: nil)
     }
     
     required init?(coder: NSCoder) {
         fatalError("init(coder:) has not been implemented")
     }
     
-    // Handle keyboard events
+    @objc func userDefaultsDidChange(_ notification: Notification) {
+        colour = UserDefaults.standard.array(forKey: "colours") as? [UInt32] ?? [UInt32]()
+    }
+    
+    // Handle keyboard events.
     override var acceptsFirstResponder: Bool { true }
     override func keyDown(with event: NSEvent) {
         let wasHandled = machine.keyDown(code: event.keyCode)
@@ -134,9 +103,9 @@ class InvadersNSView: NSView {
                 let offset: Int = ((255 - (quotient * 8)) * 224) + i - (remainder * 224);
 
                 if ((pixel & (1 << remainder)) != 0) {
-                    pixels[offset] = color[j/32]
+                    pixels[offset] = colour[j/32]
                 } else {
-                    pixels[offset] = color[8]
+                    pixels[offset] = colour[8]
                 }
             }
         }
@@ -148,19 +117,12 @@ class InvadersNSView: NSView {
     }
 }
 
-struct NavigationLazyView<Content: View>: View {
-    let build: () -> Content
-    init(_ build: @autoclosure @escaping () -> Content) {
-        self.build = build
-    }
-    var body: Content {
-        build()
-    }
-}
-
-struct ContentView_Previews: PreviewProvider {
-    static var previews: some View {
-        Intel8080View()
-            .frame(width: 500, height: 500)
-    }
-}
+let COLOURS: [[UInt32]] = [
+    [0xffdfe2ee, 0xffc5d7ee, 0xff9c9fc8, 0xff5d7cc9, 0xff5e6ab3, 0xff271601, 0xffd4ea41, 0xff3b4660, 0xff38312e],
+    [0xff466ebe, 0xffb0e7cd, 0xffa8bfa3, 0xffa08672, 0xff4a5959, 0xff525544, 0xff4a4d29, 0xff1f0232, 0xff392e4b],
+    [0xff75906e, 0xff9bc4ff, 0xffd3efff, 0xffc4b6ad, 0xff3500ff, 0xff9c938b, 0xff6c5459, 0xff5f4038, 0xff1f130e],
+    [0xfff8f8f9, 0xffced3cd, 0xffbdb5bb, 0xffa36daa, 0xffa67792, 0xff271601, 0xff3517f7, 0xff1c9fff, 0xff464750],
+    [0xff222921, 0xff364929, 0xff59623e, 0xff66825b, 0xffc7f6ae, 0xffd7d9d7, 0xffcbc5c9, 0xffffebff, 0xffae8eb4],
+    [0xff89d2ff, 0xff88c6f9, 0xff7db1f9, 0xff2a81fc, 0xff0066a5, 0xffcbc5b7, 0xff4a8383, 0xff686868, 0xff474747],
+    [0xffacb0d5, 0xffaea0ce, 0xff514568, 0xff2a2e40, 0xff8fd09c, 0xff8c7900, 0xff5b3d00, 0xff1f1700, 0xffa77e00]
+]

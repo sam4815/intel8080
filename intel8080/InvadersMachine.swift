@@ -25,7 +25,7 @@ class InvadersMachine: NSObject {
     var port3: (curr: UInt8, prev: UInt8) = (0, 0)
     var port5: (curr: UInt8, prev: UInt8) = (0, 0)
     
-    var muted: Bool = true
+    var muted: Bool = UserDefaults.standard.bool(forKey: "muted")
     var sounds: [NSSound] = []
     
     // Used to keep track of interrupts.
@@ -38,6 +38,16 @@ class InvadersMachine: NSObject {
     override init() {
         super.init()
         self.io = IO(input: input, output: output)
+        initSounds()
+        NotificationCenter.default.addObserver(self, selector: #selector(userDefaultsDidChange), name: UserDefaults.didChangeNotification, object: nil)
+    }
+    
+    deinit {
+        NotificationCenter.default.removeObserver(self, name: UserDefaults.didChangeNotification, object: nil)
+    }
+    
+    @objc func userDefaultsDidChange() {
+        muted = UserDefaults.standard.bool(forKey: "muted")
     }
     
     func input(port: UInt8) -> UInt8 {
@@ -158,13 +168,11 @@ class InvadersMachine: NSObject {
                     memOffset: data.1
                 )
             }
-        
         case Game.SpaceInvaders.rawValue:
             copyData(
                 data: NSData(contentsOfFile: Bundle.main.path(forResource: "invaders", ofType: "rom", inDirectory: "roms")!)!,
                 memOffset: 0
             )
-        
         case Game.LunarRescue.rawValue:
             copyData(
                 data: NSData(contentsOfFile: Bundle.main.path(forResource: "lrescue", ofType: "rom", inDirectory: "roms")!)!,
@@ -172,8 +180,6 @@ class InvadersMachine: NSObject {
             )
         default: ()
         }
-        
-        initSounds()
     }
     
     @objc func run() {
