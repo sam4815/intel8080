@@ -12,6 +12,7 @@ struct Intel8080App: App {
 struct Intel8080View: View {
     @State private var selectedGame = Game.SpaceInvaders.rawValue
     @AppStorage("muted") var muted = false
+    @AppStorage("paused") var paused = false
     
     func changeColour() {
         let colours = UserDefaults.standard.array(forKey: "colours") as? [UInt32] ?? [UInt32]()
@@ -32,18 +33,22 @@ struct Intel8080View: View {
             }
             ToolbarItem() { Spacer() }
             ToolbarItem() {
+                Button(action: { muted = !muted }) {
+                        Image(systemName: muted ? "speaker" : "speaker.slash")
+                            .font(Font.system(.largeTitle))
+                    }.help("Toggle sound")
+            }
+            ToolbarItem() {
                 Button(action: changeColour) {
                         Image(systemName: "paintbrush")
-                            .font(Font.system(.largeTitle))
+                            .font(Font.system(.subheadline))
                     }.help("Change colour")
             }
             ToolbarItem() {
-                Button(
-                    action: { muted = !muted },
-                    label: {
-                        Image(systemName: muted ? "speaker" : "speaker.slash")
+                Button(action: { paused = !paused }) {
+                        Image(systemName: paused ? "play.circle" : "pause.circle")
                             .font(Font.system(.largeTitle))
-                    })
+                    }.help(paused ? "Resume game" : "Pause game")
             }
         })
     }

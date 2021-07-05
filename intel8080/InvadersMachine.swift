@@ -28,6 +28,8 @@ class InvadersMachine: NSObject {
     var muted: Bool = UserDefaults.standard.bool(forKey: "muted")
     var sounds: [NSSound] = []
     
+    var paused: Bool = UserDefaults.standard.bool(forKey: "paused")
+    
     // Used to keep track of interrupts.
     var lastInterrupt: Double = 0
     var whichInterrupt: UInt16 = 2
@@ -40,6 +42,7 @@ class InvadersMachine: NSObject {
         self.io = IO(input: input, output: output)
         initSounds()
         NotificationCenter.default.addObserver(self, selector: #selector(userDefaultsDidChange), name: UserDefaults.didChangeNotification, object: nil)
+        UserDefaults.standard.set(false, forKey: "paused")
     }
     
     deinit {
@@ -47,7 +50,18 @@ class InvadersMachine: NSObject {
     }
     
     @objc func userDefaultsDidChange() {
-        muted = UserDefaults.standard.bool(forKey: "muted")
+        if (muted != UserDefaults.standard.bool(forKey: "muted")) {
+            muted = UserDefaults.standard.bool(forKey: "muted")
+        }
+        
+        if (paused == false && UserDefaults.standard.bool(forKey: "paused") == true) {
+            stop()
+            paused = true
+        }
+        if (paused == true && UserDefaults.standard.bool(forKey: "paused") == false) {
+            start()
+            paused = false
+        }
     }
     
     func input(port: UInt8) -> UInt8 {

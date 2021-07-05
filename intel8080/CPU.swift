@@ -14,8 +14,6 @@ struct State8080 {
     var cc: ConditionCodes = ConditionCodes()
     var intEnable: UInt8 = 0
     var cycle: Int = 0
-    var hit: Int = 0
-    var debug: Bool = false
 }
 
 struct ConditionCodes {
@@ -199,25 +197,29 @@ func emulateOperation(state: inout State8080, io: IO?) {
         if (setCarry) {
             // Set carry flag to 1 if answer is greater than 8 bits
             state.cc.cy = (result > 0xff) ? 1 : 0
+            
+            // Set auxiliary carry flag to 1 if there was a carry out of bit 3; otherwise set to 0
+            let val1Bit4 = (val1 >> 4) & 0b1
+            let val2Bit4 = (val2 >> 4) & 0b1
+            let sumBit4 = (val1Bit4 + val2Bit4) & 0b1
+            let resultBit4 = (result >> 4) & 0b1
+            
+            state.cc.ac = (sumBit4 == resultBit4) ? 0 : 1
         }
         
         state.a = UInt8(result & 0xff)
     }
     
-    func incrementPC(val: UInt16) {
-        state.pc = state.pc &+ val
-    }
-    
-    func incrementCycles(val: Int) {
-        state.cycle = state.cycle + val
+    func incrementCPU(pc: UInt16, cycles: Int) {
+        state.pc = state.pc &+ pc
+        state.cycle = state.cycle &+ cycles
     }
 
     switch opcode {
 
     // NOP
     case 0x00, 0x08, 0x10, 0x18, 0x20, 0x28, 0x38, 0xcb, 0xdd, 0xd9, 0xed, 0xfd:
-        incrementPC(val: 1)
-        incrementCycles(val: 4)
+        incrementCPU(pc: 1, cycles: 4)
 
     // LXI
     case 0x01, 0x11, 0x21, 0x31:
@@ -225,8 +227,7 @@ func emulateOperation(state: inout State8080, io: IO?) {
         let data = getHiLo()
         setRegisterPair(pair: pair, value: data)
         
-        incrementPC(val: 3)
-        incrementCycles(val: 10)
+        incrementCPU(pc: 3, cycles: 10)
 
     // STAX
     case 0x02, 0x12:
@@ -234,16 +235,14 @@ func emulateOperation(state: inout State8080, io: IO?) {
         let offset = getRegisterPair(pair: pair)
         state.memory[Int(offset)] = state.a
         
-        incrementPC(val: 1)
-        incrementCycles(val: 7)
+        incrementCPU(pc: 1, cycles: 7)
         
     // INX
     case 0x03, 0x13, 0x23, 0x33:
         let pair = (opcode >> 4) & 0b11
         setRegisterPair(pair: pair, value: getRegisterPair(pair: pair) &+ 1)
         
-        incrementPC(val: 1)
-        incrementCycles(val: 5)
+        incrementCPU(pc: 1, cycles: 5)
         
     // INR
     case 0x04, 0x0c, 0x14, 0x1c, 0x24, 0x2c, 0x34, 0x3c:
@@ -252,8 +251,7 @@ func emulateOperation(state: inout State8080, io: IO?) {
         setFlags(result: result)
         setRegister(register: reg, value: result)
         
-        incrementPC(val: 1)
-        incrementCycles(val: opcode == 0x34 ? 10 : 5)
+        incrementCPU(pc: 1, cycles: opcode == 0x34 ? 10 : 5)
     
     // DCR
     case 0x05, 0x0d, 0x15, 0x1d, 0x25, 0x2d, 0x35, 0x3d:
@@ -262,8 +260,7 @@ func emulateOperation(state: inout State8080, io: IO?) {
         setFlags(result: result)
         setRegister(register: reg, value: result)
         
-        incrementPC(val: 1)
-        incrementCycles(val: opcode == 0x35 ? 10 : 5)
+        incrementCPU(pc: 1, cycles: opcode == 0x35 ? 10 : 5)
         
     // MVI
     case 0x06, 0x0e, 0x16, 0x1e, 0x26, 0x2e, 0x36, 0x3e:
@@ -271,8 +268,7 @@ func emulateOperation(state: inout State8080, io: IO?) {
         let data = state.memory[Int(state.pc + 1)]
         setRegister(register: reg, value: data)
         
-        incrementPC(val: 2)
-        incrementCycles(val: opcode == 0x36 ? 10 : 7)
+        incrementCPU(pc: 2, cycles: opcode == 0x36 ? 10 : 7)
 
     // RLC
     case 0x07:
@@ -281,8 +277,7 @@ func emulateOperation(state: inout State8080, io: IO?) {
         state.cc.cy = high
         state.a = ((state.a << 1) | high) & 0xff
         
-        incrementPC(val: 1)
-        incrementCycles(val: 4)
+        incrementCPU(pc: 1, cycles: 4)
 
     // DAD
     case 0x09, 0x19, 0x29, 0x39:
@@ -295,8 +290,7 @@ func emulateOperation(state: inout State8080, io: IO?) {
         
         setRegisterPair(pair: RegisterPair.HL.rawValue, value: UInt16(sum & 0xffff))
         
-        incrementPC(val: 1)
-        incrementCycles(val: 10)
+        incrementCPU(pc: 1, cycles: 10)
 
     // LDAX
     case 0x0a, 0x1a:
@@ -304,16 +298,14 @@ func emulateOperation(state: inout State8080, io: IO?) {
         let offset = getRegisterPair(pair: pair)
         state.a = state.memory[Int(offset)]
         
-        incrementPC(val: 1)
-        incrementCycles(val: 7)
+        incrementCPU(pc: 1, cycles: 7)
 
     // DCX
     case 0x0b, 0x1b, 0x2b, 0x3b:
         let pair = (opcode >> 4) & 0b11
         setRegisterPair(pair: pair, value: getRegisterPair(pair: pair) &- 1)
         
-        incrementPC(val: 1)
-        incrementCycles(val: 5)
+        incrementCPU(pc: 1, cycles: 5)
 
     // RRC
     case 0x0f:
@@ -322,8 +314,7 @@ func emulateOperation(state: inout State8080, io: IO?) {
         state.cc.cy = low
         state.a = ((low << 7) | (state.a >> 1)) & 0xff
         
-        incrementPC(val: 1)
-        incrementCycles(val: 4)
+        incrementCPU(pc: 1, cycles: 4)
 
     // RAL
     case 0x17:
@@ -332,8 +323,7 @@ func emulateOperation(state: inout State8080, io: IO?) {
         state.a = ((state.a << 1) | state.cc.cy) & 0xff
         state.cc.cy = high
         
-        incrementPC(val: 1)
-        incrementCycles(val: 4)
+        incrementCPU(pc: 1, cycles: 4)
 
     // RAR
     case 0x1f:
@@ -342,8 +332,7 @@ func emulateOperation(state: inout State8080, io: IO?) {
         state.a = ((state.cc.cy << 7) | (state.a >> 1)) & 0xff
         state.cc.cy = low
         
-        incrementPC(val: 1)
-        incrementCycles(val: 4)
+        incrementCPU(pc: 1, cycles: 4)
 
     // SHLD adr
     case 0x22:
@@ -353,13 +342,23 @@ func emulateOperation(state: inout State8080, io: IO?) {
         state.memory[Int(data)] = l
         state.memory[Int(data) + 1] = h
         
-        incrementPC(val: 3)
-        incrementCycles(val: 16)
+        incrementCPU(pc: 3, cycles: 16)
 
     // DAA
     case 0x27:
-        print("DAA - NOT USED")
-        incrementPC(val: 1)
+        var LSB = state.a & 0xf
+        if (LSB > 9 || state.cc.ac == 1) {
+            state.a = state.a &+ 6
+            LSB = state.a & 0xff
+        }
+        
+        var MSB = (state.a >> 4) & 0xf
+        if (MSB > 9 || state.cc.cy == 1) {
+            MSB = MSB &+ 6
+            state.a = (MSB << 4) | LSB
+        }
+        
+        incrementCPU(pc: 1, cycles: 0)
 
     // LHLD adr
     case 0x2a:
@@ -367,49 +366,44 @@ func emulateOperation(state: inout State8080, io: IO?) {
         setRegister(register: Register.L.rawValue, value: state.memory[Int(data)])
         setRegister(register: Register.H.rawValue, value: state.memory[Int(data) + 1])
         
-        incrementPC(val: 3)
-        incrementCycles(val: 16)
+        incrementCPU(pc: 3, cycles: 16)
 
     // CMA
     case 0x2f:
         state.a = ~state.a
         
-        incrementPC(val: 1)
-        incrementCycles(val: 4)
+        incrementCPU(pc: 1, cycles: 4)
 
     // SIM
     case 0x30:
         print("SIM - NOT USED")
-        incrementPC(val: 1)
+        incrementCPU(pc: 1, cycles: 0)
 
     // STA adr
     case 0x32:
         let data = getHiLo()
         state.memory[Int(data)] = state.a
         
-        incrementPC(val: 3)
-        incrementCycles(val: 13)
+        incrementCPU(pc: 3, cycles: 13)
         
     // STC
     case 0x37:
         state.cc.cy = 1
         
-        incrementPC(val: 1)
-        incrementCycles(val: 4)
+        incrementCPU(pc: 1, cycles: 4)
 
     // LDA adr
     case 0x3a:
         let data = getHiLo()
         state.a = state.memory[Int(data)]
-        incrementPC(val: 3)
+        incrementCPU(pc: 3, cycles: 0)
 
     // CMC
     case 0x3f:
         // If the carry bit is zero, set it to 1. Otherwise, set to zero.
         state.cc.cy = state.cc.cy ^ 1
         
-        incrementPC(val: 1)
-        incrementCycles(val: 4)
+        incrementCPU(pc: 1, cycles: 4)
 
     // MOV
     case 0x40..<0x76,
@@ -418,8 +412,7 @@ func emulateOperation(state: inout State8080, io: IO?) {
         let dst = (opcode >> 3) & 0b111
         setRegister(register: dst, value: getRegister(register: src))
         
-        incrementPC(val: 1)
-        incrementCycles(val: (src == 6 || dst == 6) ? 7 : 5)
+        incrementCPU(pc: 1, cycles: (src == 6 || dst == 6) ? 7 : 5)
 
     // HLT
     case 0x76:
@@ -430,16 +423,14 @@ func emulateOperation(state: inout State8080, io: IO?) {
         let reg = opcode & 0b111
         add(val1: state.a, val2: getRegister(register: reg), setCarry: true)
         
-        incrementPC(val: 1)
-        incrementCycles(val: reg == 6 ? 7 : 4)
+        incrementCPU(pc: 1, cycles: reg == 6 ? 7 : 4)
 
     // ADC
     case 0x88..<0x90:
         let reg = opcode & 0b111
         add(val1: state.a, val2: getRegister(register: reg) &+ state.cc.cy, setCarry: true)
         
-        incrementPC(val: 1)
-        incrementCycles(val: reg == 6 ? 7 : 4)
+        incrementCPU(pc: 1, cycles: reg == 6 ? 7 : 4)
 
     // SUB
     case 0x90..<0x98:
@@ -447,8 +438,7 @@ func emulateOperation(state: inout State8080, io: IO?) {
         let complement = ~getRegister(register: reg) &+ 1
         add(val1: state.a, val2: complement, setCarry: true)
         
-        incrementPC(val: 1)
-        incrementCycles(val: reg == 6 ? 7 : 4)
+        incrementCPU(pc: 1, cycles: reg == 6 ? 7 : 4)
 
     // SBB
     case 0x98..<0xa0:
@@ -457,8 +447,7 @@ func emulateOperation(state: inout State8080, io: IO?) {
         let complement = ~(getRegister(register: reg) &+ state.cc.cy) &+ 1
         add(val1: state.a, val2: complement, setCarry: true)
         
-        incrementPC(val: 1)
-        incrementCycles(val: reg == 6 ? 7 : 4)
+        incrementCPU(pc: 1, cycles: reg == 6 ? 7 : 4)
 
     // ANA
     case 0xa0..<0xa8:
@@ -469,8 +458,7 @@ func emulateOperation(state: inout State8080, io: IO?) {
         state.cc.cy = 0
         state.a = result
         
-        incrementPC(val: 1)
-        incrementCycles(val: reg == 6 ? 7 : 4)
+        incrementCPU(pc: 1, cycles: reg == 6 ? 7 : 4)
 
     // XRA
     case 0xa8..<0xb0:
@@ -481,8 +469,7 @@ func emulateOperation(state: inout State8080, io: IO?) {
         state.cc.cy = 0
         state.a = result
         
-        incrementPC(val: 1)
-        incrementCycles(val: reg == 6 ? 7 : 4)
+        incrementCPU(pc: 1, cycles: reg == 6 ? 7 : 4)
 
     // ORA
     case 0xb0..<0xb8:
@@ -493,8 +480,7 @@ func emulateOperation(state: inout State8080, io: IO?) {
         state.cc.cy = 0
         state.a = result
         
-        incrementPC(val: 1)
-        incrementCycles(val: reg == 6 ? 7 : 4)
+        incrementCPU(pc: 1, cycles: reg == 6 ? 7 : 4)
 
     // CMP
     case 0xb8..<0xc0:
@@ -504,8 +490,7 @@ func emulateOperation(state: inout State8080, io: IO?) {
         // Set carry flag to 1 if answer is greater than 8 bits
         state.cc.cy = (result > 0xff) ? 1 : 0
         
-        incrementPC(val: 1)
-        incrementCycles(val: reg == 6 ? 7 : 4)
+        incrementCPU(pc: 1, cycles: reg == 6 ? 7 : 4)
 
     // RNZ, RZ, RNC, RC, RPO, RPE, RP, RM
     case 0xc0, 0xc8, 0xd0, 0xd8, 0xe0, 0xe8, 0xf0, 0xf8:
@@ -515,10 +500,9 @@ func emulateOperation(state: inout State8080, io: IO?) {
         
         if (flag == direction) {
             ret()
-            incrementCycles(val: 11)
+            incrementCPU(pc: 0, cycles: 11)
         } else {
-            incrementPC(val: 1)
-            incrementCycles(val: 5)
+            incrementCPU(pc: 1, cycles: 5)
         }
         
     // POP
@@ -526,8 +510,7 @@ func emulateOperation(state: inout State8080, io: IO?) {
         let pair = (opcode >> 4) & 0b11
         setRegisterPair(pair: pair, value: popStack())
         
-        incrementPC(val: 1)
-        incrementCycles(val: 11)
+        incrementCPU(pc: 1, cycles: 11)
 
     // POP PSW
     case 0xf1:
@@ -535,8 +518,7 @@ func emulateOperation(state: inout State8080, io: IO?) {
         setRegister(register: Register.A.rawValue, value: UInt8((data >> 8) & 0xff))
         setConditionByte(byte: UInt8(data & 0xff))
         
-        incrementPC(val: 1)
-        incrementCycles(val: 11)
+        incrementCPU(pc: 1, cycles: 11)
 
     // JNZ, JZ, JNC, JC, JPO, JPE, JP, JM
     case 0xc2, 0xca, 0xd2, 0xda, 0xe2, 0xea, 0xf2, 0xfa:
@@ -547,16 +529,16 @@ func emulateOperation(state: inout State8080, io: IO?) {
         if (flag == direction) {
             state.pc = getHiLo()
         } else {
-            incrementPC(val: 3)
+            incrementCPU(pc: 3, cycles: 0)
         }
         
-        incrementCycles(val: 10)
+        incrementCPU(pc: 0, cycles: 10)
 
     // JMP adr
     case 0xc3:
         state.pc = getHiLo()
         
-        incrementCycles(val: 10)
+        incrementCPU(pc: 0, cycles: 10)
 
     // CNZ, CZ, CNC, CC, CPO, CPE, CP, CM
     case 0xc4, 0xcc, 0xd4, 0xdc, 0xe4, 0xec, 0xf4, 0xfc:
@@ -566,10 +548,9 @@ func emulateOperation(state: inout State8080, io: IO?) {
         
         if (flag == direction) {
             call()
-            incrementCycles(val: 17)
+            incrementCPU(pc: 0, cycles: 17)
         } else {
-            incrementPC(val: 3)
-            incrementCycles(val: 11)
+            incrementCPU(pc: 3, cycles: 11)
         }
 
     // PUSH
@@ -577,16 +558,14 @@ func emulateOperation(state: inout State8080, io: IO?) {
         let pair = (opcode >> 4) & 0b11
         pushToStack(value: getRegisterPair(pair: pair))
         
-        incrementPC(val: 1)
-        incrementCycles(val: 11)
+        incrementCPU(pc: 1, cycles: 11)
         
     // PUSH PSW
     case 0xf5:
         let data = (UInt16(state.a) << 8) | UInt16(getConditionByte())
         pushToStack(value: data)
         
-        incrementPC(val: 1)
-        incrementCycles(val: 11)
+        incrementCPU(pc: 1, cycles: 11)
 
     // ADI D8
     case 0xc6:
@@ -594,8 +573,7 @@ func emulateOperation(state: inout State8080, io: IO?) {
         let data = state.memory[Int(state.pc + 1)]
         add(val1: state.a, val2: data, setCarry: true)
         
-        incrementPC(val: 2)
-        incrementCycles(val: 7)
+        incrementCPU(pc: 2, cycles: 7)
         
     // RST
     case 0xc7, 0xcf, 0xd7, 0xdf, 0xe7, 0xef, 0xf7, 0xff:
@@ -603,17 +581,17 @@ func emulateOperation(state: inout State8080, io: IO?) {
         let exp = UInt16(opcode & 0b000111)
         state.pc = exp
         
-        incrementCycles(val: 11)
+        incrementCPU(pc: 0, cycles: 11)
 
     // RET
     case 0xc9:
         ret()
-        incrementCycles(val: 10)
+        incrementCPU(pc: 0, cycles: 10)
 
     // CALL adr
     case 0xcd:
         call()
-        incrementCycles(val: 17)
+        incrementCPU(pc: 0, cycles: 17)
 
     // ACI D8
     case 0xce:
@@ -621,8 +599,7 @@ func emulateOperation(state: inout State8080, io: IO?) {
         let data = state.memory[Int(state.pc + 1)]
         add(val1: state.a, val2: data &+ state.cc.cy, setCarry: true)
         
-        incrementPC(val: 2)
-        incrementCycles(val: 7)
+        incrementCPU(pc: 2, cycles: 7)
         
     // IN D8
     case 0xdb:
@@ -630,7 +607,7 @@ func emulateOperation(state: inout State8080, io: IO?) {
             state.a = io!.input(state.memory[Int(state.pc &+ 1)])
         }
 
-        incrementPC(val: 2)
+        incrementCPU(pc: 2, cycles: 0)
     
     // OUT D8
     case 0xd3:
@@ -638,7 +615,7 @@ func emulateOperation(state: inout State8080, io: IO?) {
             io!.output(state.memory[Int(state.pc &+ 1)], state.a)
         }
         
-        incrementPC(val: 2)
+        incrementCPU(pc: 2, cycles: 0)
 
     // SUI D8
     case 0xd6:
@@ -647,8 +624,7 @@ func emulateOperation(state: inout State8080, io: IO?) {
         let complement = ~data &+ 1
         add(val1: state.a, val2: complement, setCarry: true)
         
-        incrementPC(val: 2)
-        incrementCycles(val: 7)
+        incrementCPU(pc: 2, cycles: 7)
 
     // SBI D8
     case 0xde:
@@ -657,8 +633,7 @@ func emulateOperation(state: inout State8080, io: IO?) {
         let complement = ~(data &+ state.cc.cy) &+ 1
         add(val1: state.a, val2: complement, setCarry: true)
         
-        incrementPC(val: 2)
-        incrementCycles(val: 7)
+        incrementCPU(pc: 2, cycles: 7)
 
     // XTHL
     case 0xe3:
@@ -671,8 +646,7 @@ func emulateOperation(state: inout State8080, io: IO?) {
         state.memory[Int(sp)] = l
         state.memory[Int(sp) + 1] = h
         
-        incrementPC(val: 1)
-        incrementCycles(val: 18)
+        incrementCPU(pc: 1, cycles: 18)
 
     // ANI D8
     case 0xe6:
@@ -683,14 +657,13 @@ func emulateOperation(state: inout State8080, io: IO?) {
         state.cc.cy = 0
         state.a = result
         
-        incrementPC(val: 2)
-        incrementCycles(val: 7)
+        incrementCPU(pc: 2, cycles: 7)
 
     // PCHL
     case 0xe9:
         state.pc = getRegisterPair(pair: RegisterPair.HL.rawValue)
         
-        incrementCycles(val: 5)
+        incrementCPU(pc: 0, cycles: 5)
 
     // XCHG
     case 0xeb:
@@ -699,8 +672,7 @@ func emulateOperation(state: inout State8080, io: IO?) {
         setRegisterPair(pair: RegisterPair.DE.rawValue, value: hl)
         setRegisterPair(pair: RegisterPair.HL.rawValue, value: de)
         
-        incrementPC(val: 1)
-        incrementCycles(val: 4)
+        incrementCPU(pc: 1, cycles: 4)
 
     // XRI D8
     case 0xee:
@@ -711,15 +683,13 @@ func emulateOperation(state: inout State8080, io: IO?) {
         state.cc.cy = 0
         state.a = result
         
-        incrementPC(val: 2)
-        incrementCycles(val: 7)
+        incrementCPU(pc: 2, cycles: 7)
 
     // DI
     case 0xf3:
         state.intEnable = 0
         
-        incrementPC(val: 1)
-        incrementCycles(val: 4)
+        incrementCPU(pc: 1, cycles: 4)
 
     // ORI D8
     case 0xf6:
@@ -730,22 +700,19 @@ func emulateOperation(state: inout State8080, io: IO?) {
         state.cc.cy = 0
         state.a = result
         
-        incrementPC(val: 2)
-        incrementCycles(val: 7)
+        incrementCPU(pc: 2, cycles: 7)
 
     // SPHL
     case 0xf9:
         setRegisterPair(pair: RegisterPair.SP.rawValue, value: getRegisterPair(pair: RegisterPair.HL.rawValue))
         
-        incrementPC(val: 1)
-        incrementCycles(val: 5)
+        incrementCPU(pc: 1, cycles: 5)
 
     // EI
     case 0xfb:
         state.intEnable = 1
         
-        incrementPC(val: 1)
-        incrementCycles(val: 4)
+        incrementCPU(pc: 1, cycles: 4)
 
     // CPI D8
     case 0xfe:
@@ -755,8 +722,7 @@ func emulateOperation(state: inout State8080, io: IO?) {
         // Set carry flag to 1 if answer is greater than 8 bits
         state.cc.cy = (result > 0xff) ? 1 : 0
         
-        incrementPC(val: 2)
-        incrementCycles(val: 7)
+        incrementCPU(pc: 2, cycles: 7)
 
     default:
         print("ERROR ATTEMPTING TO PARSE OPCODE")
@@ -765,8 +731,6 @@ func emulateOperation(state: inout State8080, io: IO?) {
     func toHex(n: UInt16) -> String {
         return String(format:"%04x", n)
     }
-    
-    state.hit += 1
 
 //    if (state.debug && state.pc != 0x0ada && state.pc != 0x0ade && state.pc != 0x0add) {
 //        print(

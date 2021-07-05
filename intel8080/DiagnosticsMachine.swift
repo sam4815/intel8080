@@ -1,6 +1,6 @@
 import Cocoa
 
-class TestMachine: NSObject {
+class DiagnosticsMachine: NSObject {
     public var state: State8080 = State8080()
     
     public var consoleBuffer: [String] = []
