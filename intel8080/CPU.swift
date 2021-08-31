@@ -350,15 +350,17 @@ func emulateOperation(state: inout State8080, io: IO?) {
         if (LSB > 9 || state.cc.ac == 1) {
             state.a = state.a &+ 6
             LSB = state.a & 0xff
+            state.cc.ac = LSB < 6 ? 1 : 0
         }
         
         var MSB = (state.a >> 4) & 0xf
         if (MSB > 9 || state.cc.cy == 1) {
             MSB = MSB &+ 6
             state.a = (MSB << 4) | LSB
+            if (MSB < 6) { state.cc.cy = 1 }
         }
         
-        incrementCPU(pc: 1, cycles: 0)
+        incrementCPU(pc: 1, cycles: 4)
 
     // LHLD adr
     case 0x2a:
