@@ -97,15 +97,17 @@ class InvadersNSView: NSView {
         
         for i in 0..<224 {
             for j in 0..<256 {
-                let (quotient, remainder) = j.quotientAndRemainder(dividingBy: 8)
+                if (j%8 != 0) { continue }
 
-                let pixel = machine.state.memory[0x2400 + (i * 32) + quotient];
-                let offset: Int = ((255 - (quotient * 8)) * 224) + i - (remainder * 224);
+                let pixel = machine.state.memory[0x2400 + (i * 32) + Int(j/8)];
+                let offset: Int = (255 - j) * 224 + i;
 
-                if ((pixel & (1 << remainder)) != 0) {
-                    pixels[offset] = colour[j/32]
-                } else {
-                    pixels[offset] = colour[8]
+                for p in 0..<8 {
+                    if ((pixel & (1 << p)) != 0) {
+                        pixels[offset - (p * 224)] = colour[j/32]
+                    } else {
+                        pixels[offset - (p * 224)] = colour[8]
+                    }
                 }
             }
         }
