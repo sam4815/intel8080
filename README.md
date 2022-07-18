@@ -1,6 +1,6 @@
 #  intel8080
 
-https://user-images.githubusercontent.com/32017929/179430994-2a89d0d3-9815-4528-8a5d-a8d367cf1c11.mp4
+https://user-images.githubusercontent.com/32017929/179431596-f381c13c-d3dc-4689-ac3c-ccc01257e3e3.mp4
 
 ## About
 
