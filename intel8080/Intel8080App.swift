@@ -35,19 +35,19 @@ struct Intel8080View: View {
             ToolbarItem() {
                 Button(action: { muted = !muted }) {
                         Image(systemName: muted ? "speaker" : "speaker.slash")
-                            .font(Font.system(.largeTitle))
+                            .font(Font.system(.headline))
                     }.help("Toggle sound")
             }
             ToolbarItem() {
                 Button(action: changeColour) {
                         Image(systemName: "paintbrush")
-                            .font(Font.system(.subheadline))
+                            .font(Font.system(.headline))
                     }.help("Change colour")
             }
             ToolbarItem() {
                 Button(action: { paused = !paused }) {
                         Image(systemName: paused ? "play.circle" : "pause.circle")
-                            .font(Font.system(.largeTitle))
+                            .font(Font.system(.headline))
                     }.help(paused ? "Resume game" : "Pause game")
             }
         })
